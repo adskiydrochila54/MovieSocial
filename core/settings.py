@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'users'
 ]
 
 MIDDLEWARE = [
@@ -150,3 +151,4 @@ JAZZMIN_UI_TWEAKS = {
     "footer_fixed": True,
     "sidebar_fixed": True,
 }
+
