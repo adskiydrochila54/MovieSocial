@@ -4,8 +4,44 @@ from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from PIL import Image
+from django.contrib.auth.models import AbstractUser,BaseUserManager, PermissionsMixin
 
-# Валидация изображений (аватаров)
+class UserManager(BaseUserManager):
+    def create_user(self, email, username, password=None, **extra_fields):
+        if not email:
+            raise ValueError('Users must have an email address')
+        if not username:
+            raise ValueError('Users must have an username')
+
+        email = self.normalize_email(email)
+
+        user = self.model(email=email, username=username, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, username, password, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return self.create_user(email, username, password, **extra_fields)
+
+
+class User(AbstractUser):
+    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=50, unique=True)
+    joined_date = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    is_superuser = models.BooleanField(default=False)
+
+    objects = UserManager()
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
+
+    def __str__(self):
+        return f'{self.username} - {self.email}'
+
 def validate_image(image):
     if image:
         if image.size > 2 * 1024 * 1024:  # 2 МБ
@@ -18,7 +54,6 @@ def validate_image(image):
             raise ValidationError("Некорректный формат изображения")
 
 
-# Профиль пользователя
 class Profile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -53,7 +88,6 @@ class Profile(models.Model):
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True, verbose_name="Пол")
     birth_date = models.DateField(blank=True, null=True, verbose_name="Дата рождения")
 
-    # Подписки
     following = models.ManyToManyField(
         'self',
         symmetrical=False,
@@ -61,7 +95,6 @@ class Profile(models.Model):
         blank=True
     )
 
-    # Избранное
     favorite_genres = models.ManyToManyField("Genre", blank=True, related_name="fans")
     favorite_movies = models.ManyToManyField("Movie", blank=True, related_name="liked_by")
     favorite_series = models.ManyToManyField("Series", blank=True, related_name="liked_by")
@@ -72,7 +105,6 @@ class Profile(models.Model):
         return f"Профиль пользователя {self.user.username}"
 
 
-# Жанры
 class Genre(models.Model):
     name = models.CharField(max_length=50, unique=True)
 
@@ -80,7 +112,7 @@ class Genre(models.Model):
         return self.name
 
 
-# Фильмы
+
 class Movie(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
@@ -91,8 +123,6 @@ class Movie(models.Model):
     def __str__(self):
         return self.title
 
-
-# Сериалы
 class Series(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
@@ -104,8 +134,6 @@ class Series(models.Model):
     def __str__(self):
         return self.title
 
-
-# Сигнал: создание профиля при создании пользователя
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
