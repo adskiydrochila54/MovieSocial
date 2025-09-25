@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class MoviesConfig(AppConfig):
+class DirectMessagesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'movies'
+    name = 'direct_messages'

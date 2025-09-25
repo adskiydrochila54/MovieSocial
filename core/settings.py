@@ -39,9 +39,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'users.apps.UsersConfig',
-
-    'movies'
+    'movies',
+    'reviews.apps.ReviewsConfig',
+    'direct_messages.apps.DirectMessagesConfig',
 ]
 
 MIDDLEWARE = [
@@ -121,10 +123,31 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media files
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom user model
+AUTH_USER_MODEL = 'users.User'
+
+# DRF / drf-spectacular
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.TokenAuthentication',
+    ),
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'MovieSocial API',
+    'DESCRIPTION': 'API schema for MovieSocial project',
+    'VERSION': '1.0.0',
+}
 
 JAZZMIN_SETTINGS = {
     "site_title": "🎬 MovieSocial Admin",
@@ -153,4 +176,3 @@ JAZZMIN_UI_TWEAKS = {
     "footer_fixed": True,
     "sidebar_fixed": True,
 }
-
