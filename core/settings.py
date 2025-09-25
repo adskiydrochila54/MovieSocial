@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'movies',
     'reviews.apps.ReviewsConfig',
     'direct_messages.apps.DirectMessagesConfig',
+    'news',
+    "rest_framework_simplejwt",
 ]
 
 MIDDLEWARE = [
@@ -138,10 +140,12 @@ AUTH_USER_MODEL = 'users.User'
 # DRF / drf-spectacular
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.TokenAuthentication',
-    ),
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
 }
+
+
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'MovieSocial API',
@@ -176,3 +180,8 @@ JAZZMIN_UI_TWEAKS = {
     "footer_fixed": True,
     "sidebar_fixed": True,
 }
+
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+]
+

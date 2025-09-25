@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import Chat, DirectMessage
 
-
 class DirectMessageSerializer(serializers.ModelSerializer):
     sender = serializers.StringRelatedField(read_only=True)
 

@@ -12,6 +12,8 @@ from .serializers import (
     RegisterSerializer,
     LoginSerializer,
 )
+from django.contrib.auth import login
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
@@ -70,11 +72,31 @@ class RegisterView(APIView):
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
+
+
+
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        return Response(UserSerializer(user).data)
+        user = serializer.validated_data["user"]
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "message": "Успешный вход",
+                "user": UserSerializer(user).data,
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class LogoutView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        return Response({"message": "Вы вышли из аккаунта"}, status=status.HTTP_200_OK)

@@ -7,13 +7,13 @@ from .models import User, Profile, Genre, Movie, Series
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'email', 'username', 'joined_date']
+        fields = ["id", "email", "username", "joined_date"]
 
 
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class MovieSerializer(serializers.ModelSerializer):
@@ -21,7 +21,7 @@ class MovieSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Movie
-        fields = ['id', 'title', 'description', 'release_year', 'poster', 'genres']
+        fields = ["id", "title", "description", "release_year", "poster", "genres"]
 
 
 class SeriesSerializer(serializers.ModelSerializer):
@@ -29,7 +29,7 @@ class SeriesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Series
-        fields = ['id', 'title', 'description', 'start_year', 'end_year', 'poster', 'genres']
+        fields = ["id", "title", "description", "start_year", "end_year", "poster", "genres"]
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -39,23 +39,25 @@ class ProfileSerializer(serializers.ModelSerializer):
     favorite_series = SeriesSerializer(many=True, read_only=True)
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
+    # показываем подписки не просто ID, а мини-юзера
+    following = UserSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
         fields = [
-            'id',
-            'user',
-            'avatar',
-            'bio',
-            'gender',
-            'birth_date',
-            'following',
-            'followers_count',
-            'following_count',
-            'favorite_genres',
-            'favorite_movies',
-            'favorite_series',
-            'created_at',
+            "id",
+            "user",
+            "avatar",
+            "bio",
+            "gender",
+            "birth_date",
+            "following",
+            "followers_count",
+            "following_count",
+            "favorite_genres",
+            "favorite_movies",
+            "favorite_series",
+            "created_at",
         ]
 
     def get_followers_count(self, obj):
@@ -70,18 +72,22 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password']
+        fields = ["email", "username", "password"]
 
     def validate_password(self, value):
         validate_password(value)
         return value
 
     def create(self, validated_data):
-        return User.objects.create_user(
-            email=validated_data['email'],
-            username=validated_data['username'],
-            password=validated_data['password'],
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            username=validated_data["username"],
+            password=validated_data["password"],
         )
+        # на всякий случай создаём профиль, если сигнал не сработал
+        if not hasattr(user, "profile"):
+            Profile.objects.create(user=user)
+        return user
 
 
 class LoginSerializer(serializers.Serializer):
@@ -89,8 +95,12 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        user = authenticate(username=attrs.get('email'), password=attrs.get('password'))
+        user = authenticate(
+            request=self.context.get("request"),
+            email=attrs.get("email"),
+            password=attrs.get("password"),
+        )
         if not user:
-            raise serializers.ValidationError('Invalid credentials')
-        attrs['user'] = user
+            raise serializers.ValidationError("Неверный email или пароль")
+        attrs["user"] = user
         return attrs
