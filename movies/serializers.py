@@ -23,7 +23,7 @@ class MovieSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "release_date",
-            "poster",
+            "poster_image",
             "genres",
             "actors",
             "directors",

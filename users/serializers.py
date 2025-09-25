@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import authenticate
 from .models import User, Profile, Genre, Movie, Series
 
 
@@ -11,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'name']
 
 
 class MovieSerializer(serializers.ModelSerializer):
@@ -61,3 +63,34 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_following_count(self, obj):
         return obj.following.count()
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ['email', 'username', 'password']
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+    def create(self, validated_data):
+        return User.objects.create_user(
+            email=validated_data['email'],
+            username=validated_data['username'],
+            password=validated_data['password'],
+        )
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        user = authenticate(username=attrs.get('email'), password=attrs.get('password'))
+        if not user:
+            raise serializers.ValidationError('Invalid credentials')
+        attrs['user'] = user
+        return attrs
