@@ -1,10 +1,12 @@
 from rest_framework import permissions
 
-
-class IsSenderOrReceiver(permissions.BasePermission):
+class IsParticipant(permissions.BasePermission):
     """
-    Доступ к сообщению только у отправителя или получателя
+    Доступ к сообщению или чату только если пользователь участвует в чате
     """
-
     def has_object_permission(self, request, view, obj):
-        return obj.sender == request.user or obj.receiver == request.user
+        if hasattr(obj, "participants"):  # для Chat
+            return request.user in obj.participants.all()
+        elif hasattr(obj, "chat"):  # для DirectMessage
+            return request.user in obj.chat.participants.all()
+        return False
