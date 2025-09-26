@@ -19,13 +19,11 @@ from .serializers import (
 
 User = get_user_model()
 
-
 # ================== USERS ==================
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
 
 # ================== PROFILES ==================
 class ProfileViewSet(viewsets.ModelViewSet):
@@ -38,21 +36,18 @@ class ProfileViewSet(viewsets.ModelViewSet):
         profile = self.get_object()
         if profile == request.user.profile:
             return Response({"error": "Нельзя подписаться на себя"}, status=status.HTTP_400_BAD_REQUEST)
-
         if profile in request.user.profile.following.all():
             return Response({"error": "Вы уже подписаны"}, status=status.HTTP_400_BAD_REQUEST)
-
         request.user.profile.following.add(profile)
-        return Response({"message": f"Вы подписались на {profile.user.username}"})
+        return Response({"message": f"Вы подписались на {profile.user.username}"}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def unfollow(self, request, pk=None):
         profile = self.get_object()
         if profile not in request.user.profile.following.all():
             return Response({"error": "Вы не подписаны"}, status=status.HTTP_400_BAD_REQUEST)
-
         request.user.profile.following.remove(profile)
-        return Response({"message": f"Вы отписались от {profile.user.username}"})
+        return Response({"message": f"Вы отписались от {profile.user.username}"}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def followers(self, request, pk=None):
@@ -75,7 +70,6 @@ class ProfileViewSet(viewsets.ModelViewSet):
         serializer = UserSerializer([p.user for p in friends], many=True)
         return Response(serializer.data)
 
-
 # ================== GENRES ==================
 class GenreViewSet(viewsets.ModelViewSet):
     queryset = Genre.objects.all()
@@ -85,7 +79,6 @@ class GenreViewSet(viewsets.ModelViewSet):
         if self.request.method in permissions.SAFE_METHODS:
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
-
 
 # ================== MOVIES ==================
 class MovieViewSet(viewsets.ModelViewSet):
@@ -97,7 +90,6 @@ class MovieViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
 
-
 # ================== SERIES ==================
 class SeriesViewSet(viewsets.ModelViewSet):
     queryset = Series.objects.all()
@@ -107,7 +99,6 @@ class SeriesViewSet(viewsets.ModelViewSet):
         if self.request.method in permissions.SAFE_METHODS:
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
-
 
 # ================== AUTH ==================
 class RegisterView(APIView):
@@ -134,8 +125,8 @@ class LoginView(APIView):
             {
                 "message": "Успешный вход",
                 "user": UserSerializer(user).data,
-                "refresh": str(refresh),
                 "access": str(refresh.access_token),
+                "refresh": str(refresh),
             },
             status=status.HTTP_200_OK,
         )
@@ -151,7 +142,7 @@ class LogoutView(APIView):
 
         try:
             token = RefreshToken(refresh_token)
-            token.blacklist()
+            token.blacklist()  # Помещаем токен в blacklist
             return Response({"message": "Вы вышли из аккаунта"}, status=status.HTTP_205_RESET_CONTENT)
         except TokenError:
             return Response({"error": "Невалидный или просроченный токен"}, status=status.HTTP_400_BAD_REQUEST)
