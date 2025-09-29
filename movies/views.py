@@ -19,3 +19,28 @@ class PersonViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
 
+from django.shortcuts import render, get_object_or_404, redirect
+from .models import Movie, Comment
+from .forms import CommentForm
+
+def movie_detail(request, pk):
+    movie = get_object_or_404(Movie, pk=pk)
+    comments = movie.comments.order_by('-created_at')
+
+    if request.method == 'POST':
+        form = CommentForm(request.POST)
+        if form.is_valid():
+            comment = form.save(commit=False)
+            comment.movie = movie
+            comment.author = request.user
+            comment.save()
+            return redirect('movie_detail', pk=movie.pk)
+    else:
+        form = CommentForm()
+
+    return render(request, 'movies/movie_detail.html', {
+        'movie': movie,
+        'comments': comments,
+        'form': form
+    })
+

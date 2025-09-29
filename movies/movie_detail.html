@@ -1,0 +1,22 @@
+<h2>{{ movie.title }}</h2>
+
+<h3>Комментарии</h3>
+
+{% for comment in comments %}
+    <div style="margin-bottom: 10px;">
+        <strong>{{ comment.author.username }}</strong> — {{ comment.created_at|date:"d.m.Y H:i" }}<br>
+        {{ comment.text }}
+    </div>
+{% empty %}
+    <p>Будьте первым, кто оставит комментарий!</p>
+{% endfor %}
+
+{% if user.is_authenticated %}
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Отправить</button>
+    </form>
+{% else %}
+    <p>Только зарегистрированные пользователи могут оставлять комментарии. <a href="{% url 'login' %}">Войти</a></p>
+{% endif %}
