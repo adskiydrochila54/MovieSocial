@@ -1,0 +1,27 @@
+version: "3"
+services:
+  django:
+    build: .
+    container_name: core-back
+    volumes:
+      - .:/src
+      - static_volume:/static
+      - media_volume:/media
+    restart: always
+    command: sh -c "python manage.py migrate && gunicorn name.wsgi:application --bind 0.0.0.0:8000"
+
+  nginx:
+    image: nginx
+    container_name: core-nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/static
+      - media_volume:/media
+    depends_on:
+      - django
+
+volumes:
+  static_volume:
+  media_volume:

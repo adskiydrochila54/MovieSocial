@@ -1,0 +1,23 @@
+upstream config {
+    server django:8000;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://config;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host:80;
+        proxy_redirect off;
+        client_max_body_size 100M;
+    }
+
+    location /static/ {
+        alias /static/;
+    }
+
+    location /media/ {
+        alias /media/;
+    }
+}
