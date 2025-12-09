@@ -12,7 +12,7 @@ class Review(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Review of {self.movie.title} by {self.author.username}"
+        return f"Review Of {self.movie.title}  By {self.author.username}"
 
 class Comment(models.Model):
     review = models.ForeignKey(Review,related_name="comments", on_delete=models.CASCADE)
