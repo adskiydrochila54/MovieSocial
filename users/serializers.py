@@ -1,39 +1,26 @@
-from rest_framework import serializers
-from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import authenticate
-from .models import User, Profile, Genre, Movie, Series
+from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
+from rest_framework import serializers
+
+from movies.models import Genre, Movie, Series
+from movies.serializers import GenreSerializer, MovieSerializer, SeriesSerializer
+
+from .models import Profile, User
 
 
 # ---------- USER ----------
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
+        fields = ["id", "username", "joined_date"]
+
+
+class CurrentUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
         fields = ["id", "email", "username", "joined_date"]
-
-
-# ---------- GENRES ----------
-class GenreSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Genre
-        fields = ["id", "name"]
-
-
-# ---------- MOVIES ----------
-class MovieSerializer(serializers.ModelSerializer):
-    genres = GenreSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Movie
-        fields = ["id", "title", "description", "release_year", "poster", "genres"]
-
-
-# ---------- SERIES ----------
-class SeriesSerializer(serializers.ModelSerializer):
-    genres = GenreSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Series
-        fields = ["id", "title", "description", "start_year", "end_year", "poster", "genres"]
+        read_only_fields = fields
 
 
 # ---------- PROFILE ----------
@@ -48,6 +35,29 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     following = serializers.SerializerMethodField()
     followers = serializers.SerializerMethodField()
+    birth_date = serializers.DateField(write_only=True, required=False, allow_null=True)
+    age = serializers.SerializerMethodField()
+    favorite_genre_ids = serializers.PrimaryKeyRelatedField(
+        source="favorite_genres",
+        queryset=Genre.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+    )
+    favorite_movie_ids = serializers.PrimaryKeyRelatedField(
+        source="favorite_movies",
+        queryset=Movie.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+    )
+    favorite_series_ids = serializers.PrimaryKeyRelatedField(
+        source="favorite_series",
+        queryset=Series.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Profile
@@ -58,6 +68,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "bio",
             "gender",
             "birth_date",
+            "age",
             "following",
             "followers",
             "followers_count",
@@ -65,22 +76,35 @@ class ProfileSerializer(serializers.ModelSerializer):
             "favorite_genres",
             "favorite_movies",
             "favorite_series",
+            "favorite_genre_ids",
+            "favorite_movie_ids",
+            "favorite_series_ids",
             "created_at",
         ]
 
-    def get_followers_count(self, obj):
+    def get_followers_count(self, obj) -> int:
         return obj.followers.count()
 
-    def get_following_count(self, obj):
+    def get_following_count(self, obj) -> int:
         return obj.following.count()
 
-    def get_following(self, obj):
+    def get_following(self, obj) -> list[str]:
         """Список на кого подписан"""
         return [f.user.username for f in obj.following.all()]
 
-    def get_followers(self, obj):
+    def get_followers(self, obj) -> list[str]:
         """Список подписчиков"""
         return [f.user.username for f in obj.followers.all()]
+
+    def get_age(self, obj) -> int | None:
+        if not obj.birth_date:
+            return None
+        today = timezone.localdate()
+        return (
+            today.year
+            - obj.birth_date.year
+            - ((today.month, today.day) < (obj.birth_date.month, obj.birth_date.day))
+        )
 
 
 # ---------- REGISTER ----------
@@ -101,9 +125,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             username=validated_data["username"],
             password=validated_data["password"],
         )
-        # на всякий случай создаём профиль, если сигнал не сработал
-        if not hasattr(user, "profile"):
-            Profile.objects.create(user=user)
         return user
 
 
@@ -123,22 +144,24 @@ class LoginSerializer(serializers.Serializer):
         attrs["user"] = user
         return attrs
 
-from rest_framework import serializers
-from .models import Profile
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(write_only=True)
 
 
 class FriendSerializer(serializers.ModelSerializer):
     """Мини-сериализатор профиля (для друзей/подписок/подписчиков)"""
+
     username = serializers.CharField(source="user.username", read_only=True)
-    email = serializers.EmailField(source="user.email", read_only=True)
 
     class Meta:
         model = Profile
-        fields = ["id", "username", "email", "avatar"]
+        fields = ["id", "username", "avatar"]
 
 
 class FriendsListSerializer(serializers.ModelSerializer):
     """Расширенный сериализатор профиля с подписками/друзьями"""
+
     followers = FriendSerializer(many=True, read_only=True)
     following = FriendSerializer(many=True, read_only=True)
     friends = serializers.SerializerMethodField()

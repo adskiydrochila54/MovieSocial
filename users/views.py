@@ -1,148 +1,110 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from django.contrib.auth import get_user_model
+from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Profile, Genre, Movie, Series
+from .models import Profile
+from .permissions import IsProfileOwnerOrReadOnly
 from .serializers import (
-    UserSerializer,
-    ProfileSerializer,
-    GenreSerializer,
-    MovieSerializer,
-    SeriesSerializer,
-    RegisterSerializer,
+    CurrentUserSerializer,
     LoginSerializer,
+    LogoutSerializer,
+    ProfileSerializer,
+    RegisterSerializer,
+    UserSerializer,
 )
 
 User = get_user_model()
 
-# ================== USERS ==================
+
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    search_fields = ["username"]
+    ordering_fields = ["username", "joined_date"]
+    ordering = ["username"]
 
-# ================== PROFILES ==================
-class ProfileViewSet(viewsets.ModelViewSet):
-    queryset = Profile.objects.all()
+    def get_serializer_class(self):
+        if self.action == "me":
+            return CurrentUserSerializer
+        return UserSerializer
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        return Response(self.get_serializer(request.user).data)
+
+
+class ProfileViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = Profile.objects.select_related("user").prefetch_related(
+        "following__user",
+        "followers__user",
+        "favorite_genres",
+        "favorite_movies__genres",
+        "favorite_series__genres",
+    )
     serializer_class = ProfileSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsProfileOwnerOrReadOnly]
+    search_fields = ["user__username", "bio"]
+    ordering_fields = ["created_at", "user__username"]
+    ordering = ["user__username"]
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def follow(self, request, pk=None):
         profile = self.get_object()
-        if profile == request.user.profile:
-            return Response({"error": "Нельзя подписаться на себя"}, status=status.HTTP_400_BAD_REQUEST)
-        if profile in request.user.profile.following.all():
-            return Response({"error": "Вы уже подписаны"}, status=status.HTTP_400_BAD_REQUEST)
-        request.user.profile.following.add(profile)
-        return Response({"message": f"Вы подписались на {profile.user.username}"}, status=status.HTTP_200_OK)
+        own_profile = request.user.profile
+        if profile == own_profile:
+            return Response(
+                {"detail": "You cannot follow yourself."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        own_profile.following.add(profile)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=True, methods=["delete"], permission_classes=[permissions.IsAuthenticated])
     def unfollow(self, request, pk=None):
-        profile = self.get_object()
-        if profile not in request.user.profile.following.all():
-            return Response({"error": "Вы не подписаны"}, status=status.HTTP_400_BAD_REQUEST)
-        request.user.profile.following.remove(profile)
-        return Response({"message": f"Вы отписались от {profile.user.username}"}, status=status.HTTP_200_OK)
+        request.user.profile.following.remove(self.get_object())
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"])
-    def followers(self, request, pk=None):
-        profile = self.get_object()
-        followers = profile.followers.all().select_related("user")
-        serializer = UserSerializer([p.user for p in followers], many=True)
-        return Response(serializer.data)
 
-    @action(detail=True, methods=["get"])
-    def following(self, request, pk=None):
-        profile = self.get_object()
-        following = profile.following.all().select_related("user")
-        serializer = UserSerializer([p.user for p in following], many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=["get"])
-    def friends(self, request, pk=None):
-        profile = self.get_object()
-        friends = profile.following.filter(following=profile).select_related("user")
-        serializer = UserSerializer([p.user for p in friends], many=True)
-        return Response(serializer.data)
-
-# ================== GENRES ==================
-class GenreViewSet(viewsets.ModelViewSet):
-    queryset = Genre.objects.all()
-    serializer_class = GenreSerializer
-
-    def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.AllowAny()]
-        return [permissions.IsAdminUser()]
-
-# ================== MOVIES ==================
-class MovieViewSet(viewsets.ModelViewSet):
-    queryset = Movie.objects.all()
-    serializer_class = MovieSerializer
-
-    def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.AllowAny()]
-        return [permissions.IsAdminUser()]
-
-# ================== SERIES ==================
-class SeriesViewSet(viewsets.ModelViewSet):
-    queryset = Series.objects.all()
-    serializer_class = SeriesSerializer
-
-    def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [permissions.AllowAny()]
-        return [permissions.IsAdminUser()]
-
-# ================== AUTH ==================
-class RegisterView(APIView):
+class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
+    serializer_class = RegisterSerializer
+
+
+class LoginView(generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = LoginSerializer
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
-
-
-class LoginView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data, context={"request": request})
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
-
         refresh = RefreshToken.for_user(user)
-
         return Response(
             {
-                "message": "Успешный вход",
-                "user": UserSerializer(user).data,
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-            },
-            status=status.HTTP_200_OK,
+                "user": UserSerializer(user).data,
+            }
         )
 
 
-class LogoutView(APIView):
+class LogoutView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = LogoutSerializer
 
     def post(self, request):
-        refresh_token = request.data.get("refresh")
-        if not refresh_token:
-            return Response({"error": "Требуется refresh токен"}, status=status.HTTP_400_BAD_REQUEST)
-
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh_token = serializer.validated_data["refresh"]
         try:
-            token = RefreshToken(refresh_token)
-            token.blacklist()  # Помещаем токен в blacklist
-            return Response({"message": "Вы вышли из аккаунта"}, status=status.HTTP_205_RESET_CONTENT)
+            RefreshToken(refresh_token).blacklist()
         except TokenError:
-            return Response({"error": "Невалидный или просроченный токен"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Недействительный или просроченный refresh-токен."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)

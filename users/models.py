@@ -1,10 +1,8 @@
-from django.db import models
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from PIL import Image
+from django.core.exceptions import ValidationError
+from django.db import models
+from PIL import Image, UnidentifiedImageError
 
 
 # ---------- Пользователь ----------
@@ -26,6 +24,10 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, username, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
         return self.create_user(email, username, password, **extra_fields)
 
 
@@ -59,10 +61,15 @@ def validate_image(image):
 
         try:
             img = Image.open(image)
-            if img.format not in ["JPEG", "JPG", "PNG", "GIF"]:
-                raise ValidationError("Поддерживаются только JPEG, JPG, PNG, GIF")
-        except Exception:
+            image_format = img.format
+            img.verify()
+        except (UnidentifiedImageError, OSError, SyntaxError):
             raise ValidationError("Некорректный формат изображения")
+        finally:
+            image.seek(0)
+
+        if image_format not in {"JPEG", "PNG", "GIF"}:
+            raise ValidationError("Поддерживаются только JPEG, PNG и GIF")
 
 
 # ---------- Профиль ----------
@@ -103,9 +110,15 @@ class Profile(models.Model):
     )
 
     # Интересы
-    favorite_genres = models.ManyToManyField("Genre", blank=True, related_name="fans")
-    favorite_movies = models.ManyToManyField("Movie", blank=True, related_name="liked_by")
-    favorite_series = models.ManyToManyField("Series", blank=True, related_name="liked_by")
+    favorite_genres = models.ManyToManyField(
+        "movies.Genre", blank=True, related_name="favorited_by"
+    )
+    favorite_movies = models.ManyToManyField(
+        "movies.Movie", blank=True, related_name="favorited_by"
+    )
+    favorite_series = models.ManyToManyField(
+        "movies.Series", blank=True, related_name="favorited_by"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -120,44 +133,3 @@ class Profile(models.Model):
     def is_friends_with(self, profile):
         """Проверяет, дружат ли (взаимная подписка)"""
         return self.is_following(profile) and profile.is_following(self)
-
-
-# ---------- Жанры ----------
-class Genre(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-
-    def __str__(self):
-        return self.name
-
-
-# ---------- Фильмы ----------
-class Movie(models.Model):
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True, null=True)
-    release_year = models.PositiveIntegerField()
-    poster = models.ImageField(upload_to="movies/", blank=True, null=True, validators=[validate_image])
-    genres = models.ManyToManyField(Genre, related_name="movies")
-
-    def __str__(self):
-        return self.title
-
-
-# ---------- Сериалы ----------
-class Series(models.Model):
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True, null=True)
-    start_year = models.PositiveIntegerField()
-    end_year = models.PositiveIntegerField(blank=True, null=True)
-    poster = models.ImageField(upload_to="series/", blank=True, null=True, validators=[validate_image])
-    genres = models.ManyToManyField(Genre, related_name="series")
-
-    def __str__(self):
-        return self.title
-
-
-# ---------- Сигналы ----------
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_user_profile(sender, instance, created, **kwargs):
-    """Автоматически создаем профиль при регистрации"""
-    if created:
-        Profile.objects.create(user=instance)
