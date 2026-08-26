@@ -14,38 +14,33 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.conf.urls.static import static
+
 from django.conf import settings
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
+from .views import health_check
 
 urlpatterns = [
-
     path("admin/", admin.site.urls),
-
-
-    path("api/", include("users.urls")),
-
-
-    path("api/", include("reviews.urls")),
-
-
-    path("api/", include("direct_messages.urls")),
-
-
+    path("health/", health_check, name="health"),
+    path("api/v1/", include("users.urls")),
+    path("api/v1/", include("movies.urls")),
+    path("api/v1/", include("reviews.urls")),
+    path("api/v1/", include("direct_messages.urls")),
     path("api-auth/", include("rest_framework.urls")),
+    path("api/v1/", include("news.urls")),
+]
 
-    path("api/", include("news.urls")),
-
-
-
-]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 swagger_urlpatterns = [
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger'),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger"),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]
 
 urlpatterns += swagger_urlpatterns

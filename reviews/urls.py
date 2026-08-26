@@ -1,6 +1,7 @@
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from django.urls import path, include
-from .views import ReviewViewSet, CommentViewSet, ReviewLikeViewSet
+
+from .views import CommentViewSet, ReviewLikeViewSet, ReviewViewSet
 
 router = DefaultRouter()
 router.register(r"reviews", ReviewViewSet, basename="reviews")

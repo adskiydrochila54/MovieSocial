@@ -1,41 +1,54 @@
-from rest_framework import viewsets, permissions
-from rest_framework.exceptions import PermissionDenied
-from django.contrib.auth import get_user_model
+from django.db.models import Prefetch
+from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
+
 from .models import Chat, DirectMessage
-from .serializers import ChatSerializer, DirectMessageSerializer
 from .permissions import IsParticipant
+from .serializers import ChatCreateSerializer, ChatSerializer, DirectMessageSerializer
 
-User = get_user_model()
 
-
-class ChatViewSet(viewsets.ModelViewSet):
+class ChatViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = Chat.objects.none()
     serializer_class = ChatSerializer
     permission_classes = [permissions.IsAuthenticated, IsParticipant]
 
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ChatCreateSerializer
+        return ChatSerializer
+
     def get_queryset(self):
-        return Chat.objects.filter(participants=self.request.user)
-
-    def perform_create(self, serializer):
-        participants_ids = self.request.data.get("participants", [])
-        if not participants_ids or len(participants_ids) != 1:
-            raise PermissionDenied("Вы должны указать одного другого участника для чата")
-
-        other_user_id = participants_ids[0]
-        try:
-            other_user = User.objects.get(id=other_user_id)
-        except User.DoesNotExist:
-            raise PermissionDenied("Пользователь не найден")
-
-        chat = serializer.save()
-        chat.participants.add(self.request.user, other_user)
+        return Chat.objects.filter(participants=self.request.user).prefetch_related(
+            "participants",
+            Prefetch(
+                "messages",
+                queryset=DirectMessage.objects.select_related("sender").order_by("-created_at"),
+                to_attr="prefetched_messages",
+            ),
+        )
 
 
-class DirectMessageViewSet(viewsets.ModelViewSet):
+class DirectMessageViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = DirectMessage.objects.none()
     serializer_class = DirectMessageSerializer
     permission_classes = [permissions.IsAuthenticated, IsParticipant]
 
     def get_queryset(self):
-        return DirectMessage.objects.filter(chat__participants=self.request.user)
+        return DirectMessage.objects.filter(chat__participants=self.request.user).select_related(
+            "chat", "sender"
+        )
 
     def perform_create(self, serializer):
         chat_id = self.request.data.get("chat")
@@ -48,3 +61,12 @@ class DirectMessageViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Вы не участник этого чата")
 
         serializer.save(sender=self.request.user, chat=chat)
+
+    @action(detail=True, methods=["post"], url_path="mark-read")
+    def mark_read(self, request, pk=None):
+        message = self.get_object()
+        if message.sender_id == request.user.id:
+            raise ValidationError({"detail": "A sender cannot mark their own message as read."})
+        message.is_read = True
+        message.save(update_fields=["is_read"])
+        return Response(status=status.HTTP_204_NO_CONTENT)

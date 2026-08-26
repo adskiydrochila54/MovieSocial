@@ -25,6 +25,7 @@ media/
 staticfiles/
 *.mo
 *.cover
+.coverage
 coverage.xml
 htmlcov/
 *.pytest_cache/

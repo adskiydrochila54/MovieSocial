@@ -1,11 +1,9 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
+
 
 class Chat(models.Model):
-    participants = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        related_name="chats"
-    )
+    participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="chats")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -13,19 +11,15 @@ class Chat(models.Model):
         return f"Chat between {usernames}"
 
     def last_message(self):
+        if hasattr(self, "prefetched_messages"):
+            return self.prefetched_messages[0] if self.prefetched_messages else None
         return self.messages.order_by("-created_at").first()
 
 
 class DirectMessage(models.Model):
-    chat = models.ForeignKey(
-        Chat,
-        related_name="messages",
-        on_delete=models.CASCADE
-    )
+    chat = models.ForeignKey(Chat, related_name="messages", on_delete=models.CASCADE)
     sender = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="sent_messages",
-        on_delete=models.CASCADE
+        settings.AUTH_USER_MODEL, related_name="sent_messages", on_delete=models.CASCADE
     )
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
