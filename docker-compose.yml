@@ -1,27 +1,68 @@
-version: "3"
 services:
-  django:
-    build: .
-    container_name: core-back
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-movix}
+      POSTGRES_USER: ${POSTGRES_USER:-movix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-movix}
     volumes:
-      - .:/src
-      - static_volume:/static
-      - media_volume:/media
-    restart: always
-    command: sh -c "python manage.py migrate && gunicorn name.wsgi:application --bind 0.0.0.0:8000"
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-movix} -d ${POSTGRES_DB:-movix}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  django:
+    build:
+      context: .
+      dockerfile: DockerFile
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-docker-development-key}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,django}
+      DB_ENGINE: postgresql
+      POSTGRES_DB: ${POSTGRES_DB:-movix}
+      POSTGRES_USER: ${POSTGRES_USER:-movix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-movix}
+      POSTGRES_HOST: db
+      STATIC_ROOT: /app/staticfiles
+      MEDIA_ROOT: /app/media
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:3000}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-false}
+    command: >-
+      sh -c "python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   nginx:
-    image: nginx
-    container_name: core-nginx
+    image: nginx:1.29-alpine
     ports:
       - "8000:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-      - static_volume:/static
-      - media_volume:/media
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
     depends_on:
-      - django
+      django:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
+  postgres_data:
   static_volume:
   media_volume:
